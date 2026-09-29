@@ -1,6 +1,6 @@
 /** BYOD iPad 抽查系統 — Google Apps Script / HTML Service. */
 const HEADERS_ = {
-  Actions: ['id','title','date','grade','coordinatorName','coordinatorEmail','status','classesJson','createdAt','updatedAt'],
+  Actions: ['id','title','date','time','grade','coordinatorName','coordinatorEmail','status','classesJson','createdAt','updatedAt'],
   Assignments: ['actionId','classId','label','teacherEmail','sampleCount','rosterJson','selectedJson','replacementJson','updatedAt'],
   Records: ['actionId','classId','studentId','result','issuesJson','remarks','followUp','followDate','followNotes','checkedBy','checkedAt']
 };
@@ -50,14 +50,14 @@ function initializeStorage() {
   Object.keys(HEADERS_).forEach(name=>{let sh=ss.getSheetByName(name);if(!sh)sh=ss.insertSheet(name);if(sh.getLastRow()===0)sh.appendRow(HEADERS_[name]);});
   return '已建立 Actions、Assignments、Records 工作表。';
 }
-function actions_() { return rows_(sheet_('Actions')).map(({row,data:d})=>({row,id:String(d.id),title:String(d.title),date:dateText_(d.date),grade:String(d.grade),coordinatorName:String(d.coordinatorName),coordinatorEmail:String(d.coordinatorEmail).toLowerCase(),status:String(d.status),classes:json_(d.classesJson,[]),createdAt:String(d.createdAt),updatedAt:String(d.updatedAt)})); }
+function actions_() { return rows_(sheet_('Actions')).map(({row,data:d})=>({row,id:String(d.id),title:String(d.title),date:dateText_(d.date),time:String(d.time||''),grade:String(d.grade),coordinatorName:String(d.coordinatorName),coordinatorEmail:String(d.coordinatorEmail).toLowerCase(),status:String(d.status),classes:json_(d.classesJson,[]),createdAt:String(d.createdAt),updatedAt:String(d.updatedAt)})); }
 function action_(id) { const a=actions_().find(x=>x.id===id);if(!a)throw new Error('找不到行動。');return a; }
 function assignments_(id) {return rows_(sheet_('Assignments')).filter(x=>String(x.data.actionId)===id).map(({row,data:d})=>({row,actionId:String(d.actionId),classId:String(d.classId),label:String(d.label),teacherEmail:String(d.teacherEmail).toLowerCase(),sampleCount:Number(d.sampleCount),roster:json_(d.rosterJson,[]),selected:json_(d.selectedJson,[]),replacementLog:json_(d.replacementJson,[])}));}
 function assignment_(id,classId) {let a=assignments_(id).find(x=>x.classId===classId);if(!a)throw new Error('找不到班別。');return a;}
 function records_(id) {return rows_(sheet_('Records')).filter(x=>String(x.data.actionId)===id).map(({row,data:d})=>({row,actionId:String(d.actionId),classId:String(d.classId),studentId:String(d.studentId),result:String(d.result),issues:json_(d.issuesJson,[]),remarks:String(d.remarks||''),followUp:d.followUp===true||String(d.followUp).toLowerCase()==='true',followDate:dateText_(d.followDate),followNotes:String(d.followNotes||''),checkedBy:String(d.checkedBy),checkedAt:String(d.checkedAt)}));}
 function view_(a,as,rs) {
   const progress=Object.fromEntries(as.map(c=>{let checked=c.selected.filter(id=>rs.some(r=>r.classId===c.classId&&r.studentId===id&&r.result)).length;return[c.classId,{total:c.sampleCount,checked,done:c.selected.length===c.sampleCount&&checked===c.sampleCount}]}));
-  return {id:a.id,title:a.title,date:a.date,grade:a.grade,coordinatorName:a.coordinatorName,coordinatorEmail:a.coordinatorEmail,status:a.status,classes:a.classes,progress,createdAt:a.createdAt};
+  return {id:a.id,title:a.title,date:a.date,time:a.time,grade:a.grade,coordinatorName:a.coordinatorName,coordinatorEmail:a.coordinatorEmail,status:a.status,classes:a.classes,progress,createdAt:a.createdAt};
 }
 function getAppState() {
   const address=email_(), admin=isAdmin_(address), all=actions_();
@@ -76,16 +76,16 @@ function getAction(id) {
 }
 function createAction(payload) {
   admin_();return locked_(()=>{
-    const p=payload||{},id=Utilities.getUuid(),title=bounded_(p.title,100),date=String(p.date||''),grade=bounded_(p.grade,30),coordinatorName=bounded_(p.coordinatorName,60),coordinatorEmail=mail_(p.coordinatorEmail);
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Error('日期格式錯誤。');
+    const p=payload||{},id=Utilities.getUuid(),title=bounded_(p.title,100),date=String(p.date||''),time=String(p.time||''),grade=bounded_(p.grade,30),coordinatorName=bounded_(p.coordinatorName,60),coordinatorEmail=mail_(p.coordinatorEmail);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))throw new Error('日期或時間格式錯誤。');
     if(!Array.isArray(p.classes)||p.classes.length<1||p.classes.length>15)throw new Error('每次須有 1 至 15 班。');
     const used=new Set(),cls=p.classes.map((c,i)=>{let label=bounded_(c.label,20),teacherEmail=mail_(c.teacherEmail),roster=Array.isArray(c.roster)?c.roster:[],n=Number(c.sampleCount);
       if(used.has(label))throw new Error('班別不能重複。');used.add(label);
       if(roster.length<1||roster.length>60||!Number.isInteger(n)||n<1||n>roster.length)throw new Error(label+'：抽查人數或學生人數不合規格。');
       const names=roster.map(x=>bounded_(x,80));if(new Set(names).size!==names.length)throw new Error(label+'：學生名單有重複。');
       return{id:'c'+(i+1),label,teacherEmail,sampleCount:n,roster:names.map((name,k)=>({id:'s'+(k+1),name}))};});
-    const time=now_();sheet_('Actions').appendRow([id,title,date,grade,coordinatorName,coordinatorEmail,'active',JSON.stringify(cls.map(({id,label,teacherEmail})=>({id,label,teacherEmail}))),time,time]);
-    const sh=sheet_('Assignments');cls.forEach(c=>sh.appendRow([id,c.id,c.label,c.teacherEmail,c.sampleCount,JSON.stringify(c.roster),'[]','[]',time]));
+    const stamp=now_();sheet_('Actions').appendRow([id,title,date,time,grade,coordinatorName,coordinatorEmail,'active',JSON.stringify(cls.map(({id,label,teacherEmail})=>({id,label,teacherEmail}))),stamp,stamp]);
+    const sh=sheet_('Assignments');cls.forEach(c=>sh.appendRow([id,c.id,c.label,c.teacherEmail,c.sampleCount,JSON.stringify(c.roster),'[]','[]',stamp]));
     return id;
   });
 }
@@ -122,5 +122,5 @@ function setActionStatus(id,status) {return locked_(()=>{
   const address=email_(),a=action_(String(id));if(!lead_(a,address))throw new Error('只有統籌或管理員可結束行動。');
   if(!['active','completed'].includes(status))throw new Error('狀態無效。');
   if(status==='completed'){let detail=getAction(id),p=detail.action.progress;if(a.classes.some(c=>!p[c.id]||!p[c.id].done))throw new Error('仍有班別未完成。');}
-  sheet_('Actions').getRange(a.row,7).setValue(status);sheet_('Actions').getRange(a.row,10).setValue(now_());return true;
+  sheet_('Actions').getRange(a.row,8).setValue(status);sheet_('Actions').getRange(a.row,11).setValue(now_());return true;
 });}
