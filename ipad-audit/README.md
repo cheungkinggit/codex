@@ -1,28 +1,29 @@
-# 藍循 · 學生 iPad 抽查
+# BYOD iPad 抽查系統
 
-手機優先的學校內部抽查紀錄系統。管理員建立行動、指定統籌和每班老師、貼上各班學生名單及設定抽樣人數；老師用 Google 帳戶登入，隨機抽樣、記錄結果、處理缺席重抽。統籌及管理員可檢視整體報告，列印／另存 PDF，完成行動仍可從歷史紀錄重開。
+手機優先的 Google Apps Script 網頁，程式碼保存在 GitHub，學生資料只寫入學校控制的 Google Sheet。相片中的[工作指引文字版](WORK_GUIDE.md)已放到每頁底部的可收合區塊；預設收起。
 
-## 上線前設定
+## 功能
 
-此 repository 只存放網頁程式，**不可上傳學生名單或報告**。學生資料保存在你自己的 Firebase Cloud Firestore。GitHub Pages 網頁本身可公開讀取，但沒有 Firebase 權限的人無法讀取資料。上線前請學校確認資料保留、帳戶管理及內部私隱安排。
+- 管理員按日期、時間及年級建立行動，指定統籌、每班老師、學生名單及各班抽查人數（預設五人）。
+- 老師只讀寫自己獲指派班別的學生資料；同一行動的所有負責老師可看各班完成進度。
+- 隨機抽樣；學生缺席可重抽並保留替換記錄；已有檢查結果的學生不能標記缺席。
+- 記錄「沒有問題」或四種問題、檢查備註，以及需否跟進、跟進日期和備註。
+- 統籌及管理員可查看整體報告，用瀏覽器列印／另存 PDF；結束後仍可翻查，必要時重新開啟。內容太長的報告可能超過一頁。
+- 頁面每 20 秒更新其他老師的進度；正編輯欄位時暫緩刷新，以免清除輸入。
 
-1. 在 [Firebase 控制台](https://console.firebase.google.com/) 建立學校控制的專案和 Web app；啟用 **Authentication → Google** 登入，並建立 **Cloud Firestore** 資料庫。將 GitHub Pages 網域（例如 `cheungkinggit.github.io`）加到 Authentication 的 Authorized domains。
-2. 在 Firestore **Rules** 貼上 `firestore.rules` 全文並發佈。預設所有讀寫都會拒絕，直至建立管理員。不要改用測試模式規則處理真實學生資料。
-3. 複製 `firebase-config.example.js` 為 `firebase-config.js`，填上 Firebase Web app 的 `apiKey`、`authDomain`、`projectId`、`appId`。這些是公開的專案識別資料，不是後端密鑰；真正的存取權由 Authentication 與 Firestore Rules 控制。
-4. 管理員先用 Google 登入一次（會因尚未建立管理員而見到空白／權限提示）。到 Firebase Authentication 找出該人的 **UID**，再在 Firestore 控制台手動新增文件 `admins/<UID>`（內容可設 `name: "管理員"`）。只由 Firebase 控制台管理這個名單；網頁本身無法提升權限。登出再登入。
-5. 在 GitHub repository **Settings → Pages → Build and deployment** 選 **GitHub Actions**。現成工作流程會把網站發佈到 `/codex/ipad-audit/`。在 **Settings → Secrets and variables → Actions** 建立 `FIREBASE_CONFIG_JS` secret，內容是完整 `export const firebaseConfig = { ... };`。這些 Web app 設定會成為公開網頁的一部分，並非密鑰；學生名單及後端服務帳戶密鑰絕對不要放入此 secret 或 repository。
-6. 先以虛構學生名單測試：建立行動、用老師帳戶登入抽樣及記錄、另用統籌帳戶看報告，再輸入真實學生資料。
+## 部署（由學校 Google Workspace 管理帳戶操作）
 
-## 權限和工作流程
+1. 在學校 Drive 建立一個**只有系統擁有人可以存取**的 Google Sheet，複製試算表 ID。老師無須直接取得 Sheet 權限。
+2. 在 [script.google.com](https://script.google.com/) 建立獨立 Apps Script 專案。把 `apps-script/` 中的 `Code.gs`、`Index.html`、`Styles.html`、`Client.html` 和 `appsscript.json` 複製到相同名稱的檔案。HTML 三個檔案在編輯器選「HTML」類型；`appsscript.json` 在專案設定開啟顯示資訊清單後編輯。
+3. 在 **專案設定 → 指令碼屬性**設定：`SPREADSHEET_ID`＝試算表 ID、`SCHOOL_DOMAIN`＝學校 Google Workspace 網域（例如 `school.edu.hk`，不包含 @）、`ADMIN_EMAILS`＝一個或多個管理員的學校電郵，以英文逗號分隔。不要將這些資料加入公開 GitHub 程式碼。
+4. 用管理員帳戶在 Apps Script 編輯器執行 `initializeStorage` 一次並授權。它會建立 `Actions`、`Assignments`、`Records` 三個工作表。
+5. **部署 → 新部署 → 網頁應用程式**：執行身分選「我」；可存取對象選「機構內所有使用者」。部署者必須與老師屬於同一 Google Workspace 網域。複製部署後的 `/exec` 網址予負責老師。
+6. 先用虛構學生測試兩個教師帳戶、統籌帳戶、缺席重抽、報告和權限，再放入真實資料。更新程式後須建立新部署版本。
 
-- **管理員**：可見全部行動及班別；建立行動和閱覽報告。管理員由 Firestore 控制台 `admins/<UID>` 決定。
-- **統籌人**：登入電郵須和該次行動指定電郵相同；可看該次所有班別詳情、報告，並結束或重新開啟行動。
-- **負責老師**：只可看自己班的抽樣名單及紀錄；各老師都會看到所有班的完成進度，但無權讀其他班的學生資料。資料更改後其他裝置會即時接收行動進度。
-- 每班抽查人數預設五人，可更改。抽樣後的缺席重抽會保留誰被替換及時間；已有檢查結果的學生不能用「缺席」重抽。抽樣使用瀏覽器的安全隨機數來源。
-- 報告以 A4 橫向緊湊排版；若選取人數或備註太多，列印可能分成多頁。瀏覽器「列印 → 儲存為 PDF」即可保存。
+## 身分辨識限制
 
-## 技術及限制
+Apps Script 使用 `Session.getActiveUser().getEmail()` 辨認老師；Google 說明指出「以我執行」的網頁應用程式在某些情況會回傳空白電郵，而部署者與使用者同屬一個 Workspace 網域時一般不受這個限制。系統在電郵空白或網域不符時會**拒絕讀寫**。如學校使用跨網域／個人 Gmail 帳戶，這套部署設定不適用，需先改用另一種經驗證的登入及資料架構。學校應先測試實際教師帳戶。
 
-純 HTML/CSS/JavaScript，Firebase Authentication 和 Firestore；無需自設伺服器。行動建立時，學生名單會複製到該次行動；新的行動需再次貼上名單。請勿把 CSV／學生名單 commit 到 GitHub。班內有多位老師同時操作同一班時，系統仍按指定的一個負責老師帳戶管理。Firestore 規則保障資料存取和主要不可變欄位，已授權老師仍需按學校流程正確記錄。網頁登出並不會刪除已列印或下載的報告。
+## 資料與權限
 
-本機預覽：在此目錄執行 `python -m http.server 8000`，然後開啟 `http://localhost:8000/`。Firebase 須把 `localhost` 加入 Authorized domains。沒有 `firebase-config.js` 時會顯示設定提示，不會接收學生資料。
+每個伺服器操作都重新核對 Google 帳戶：管理員可建立行動；統籌可讀全級紀錄及結束行動；負責老師只可更新自己班別。Sheet 不直接分享予教師。程式以 Script Lock 避免同時寫入互相覆蓋。GitHub 不存放學生名單、報告或個人憑證；學校應自行訂立保存期限及備份安排。
