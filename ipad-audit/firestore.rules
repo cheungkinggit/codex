@@ -11,20 +11,6 @@ service cloud.firestore {
       return participant(id) &&
         get(/databases/$(database)/documents/actions/$(id)/assignments/$(classId)).data.teacherEmail == mail();
     }
-    function onlyProgress(id) {
-      let changed = request.resource.data.progress.diff(resource.data.progress).affectedKeys();
-      let classId = changed.toList()[0];
-      return changed.size() == 1 &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['progress', 'updatedAt']) &&
-        assigned(id, classId) &&
-        request.resource.data.progress[classId].keys().hasOnly(['total','checked','done']) &&
-        request.resource.data.progress[classId].total == resource.data.progress[classId].total &&
-        request.resource.data.progress[classId].checked is int &&
-        request.resource.data.progress[classId].checked >= 0 &&
-        request.resource.data.progress[classId].checked <= resource.data.progress[classId].total &&
-        request.resource.data.progress[classId].done ==
-          (request.resource.data.progress[classId].checked == resource.data.progress[classId].total);
-    }
     match /admins/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;
       allow list, create, update, delete: if false;
@@ -32,12 +18,25 @@ service cloud.firestore {
     match /actions/{id} {
       allow get, list: if admin() || (signedIn() && mail() in resource.data.participantEmails);
       allow create: if admin() &&
-        request.resource.data.keys().hasAll(['title','date','grade','coordinatorEmail','participantEmails','classes','progress','status']) &&
+        request.resource.data.keys().hasAll(['title','date','grade','coordinatorEmail','participantEmails','classes','status']) &&
         request.resource.data.status == 'active';
       allow update: if (lead(id) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt']) &&
-        request.resource.data.status in ['active','completed']) || onlyProgress(id);
+        request.resource.data.status in ['active','completed']);
       allow delete: if false;
+      match /progress/{classId} {
+        allow get, list: if participant(id) || admin();
+        allow create: if admin() &&
+          getAfter(/databases/$(database)/documents/actions/$(id)).data.classes.size() > 0 &&
+          request.resource.data.keys().hasOnly(['total','checked','done','teacherEmail']) &&
+          request.resource.data.checked == 0 && request.resource.data.done == false;
+        allow update: if assigned(id,classId) && action(id).status == 'active' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checked','done']) &&
+          request.resource.data.checked is int &&
+          request.resource.data.checked >= 0 && request.resource.data.checked <= resource.data.total &&
+          request.resource.data.done == (request.resource.data.checked == resource.data.total);
+        allow delete: if false;
+      }
       match /assignments/{classId} {
         allow get, list: if lead(id) || assigned(id,classId);
         allow create: if admin() &&
