@@ -10,7 +10,7 @@
 2. 在 Firestore **Rules** 貼上 `firestore.rules` 全文並發佈。預設所有讀寫都會拒絕，直至建立管理員。不要改用測試模式規則處理真實學生資料。
 3. 複製 `firebase-config.example.js` 為 `firebase-config.js`，填上 Firebase Web app 的 `apiKey`、`authDomain`、`projectId`、`appId`。這些是公開的專案識別資料，不是後端密鑰；真正的存取權由 Authentication 與 Firestore Rules 控制。
 4. 管理員先用 Google 登入一次（會因尚未建立管理員而見到空白／權限提示）。到 Firebase Authentication 找出該人的 **UID**，再在 Firestore 控制台手動新增文件 `admins/<UID>`（內容可設 `name: "管理員"`）。只由 Firebase 控制台管理這個名單；網頁本身無法提升權限。登出再登入。
-5. GitHub Pages 可用 GitHub Actions 將 `ipad-audit/` 發佈到專案網址 `/codex/ipad-audit/`。設定 Firebase config 時，建議把 `firebase-config.js` 寫入 GitHub Actions **repository secrets** 並在建置時產生檔案；不要把實際設定和學生資料混為一談。另可直接在發布分支放公開 config（它並非密鑰）。
+5. 在 GitHub repository **Settings → Pages → Build and deployment** 選 **GitHub Actions**。現成工作流程會把網站發佈到 `/codex/ipad-audit/`。在 **Settings → Secrets and variables → Actions** 建立 `FIREBASE_CONFIG_JS` secret，內容是完整 `export const firebaseConfig = { ... };`。這些 Web app 設定會成為公開網頁的一部分，並非密鑰；學生名單及後端服務帳戶密鑰絕對不要放入此 secret 或 repository。
 6. 先以虛構學生名單測試：建立行動、用老師帳戶登入抽樣及記錄、另用統籌帳戶看報告，再輸入真實學生資料。
 
 ## 權限和工作流程
