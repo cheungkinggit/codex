@@ -1,3 +1,3 @@
 # Codex projects
 
-This repository contains small school tools. The student iPad inspection app is in [`ipad-audit/`](ipad-audit/).
+BYOD iPad 抽查系統已搬至 [cheungkinggit/byod](https://github.com/cheungkinggit/byod)。
